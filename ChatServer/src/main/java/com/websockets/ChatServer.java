@@ -9,9 +9,7 @@ import javax.websocket.*;
 import javax.websocket.server.ServerEndpoint;
 import javax.websocket.server.ServerEndpointConfig;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
+import java.util.*;
 
 @Service
 @ServerEndpoint(
@@ -28,6 +26,8 @@ public class ChatServer {
     private static final String USERNAMES_KEY = "usernames";
 
     private Session session;
+    private static final Set<Session> sessions = Collections.synchronizedSet(new HashSet<Session>());
+
     private ServerEndpointConfig endpointConfig;
     private Transcript transcript;
 
@@ -38,6 +38,7 @@ public class ChatServer {
                 (ChatServerConfigurator) endpointConfig.getConfigurator();
         transcript = chatServerConfigurator.getTranscript();
         this.session = session;
+        sessions.add(session);
     }
 
     @OnMessage
@@ -63,8 +64,8 @@ public class ChatServer {
     @OnClose
     public void endChatChannel() {
         if (this.getCurrentUsername() != null) {
-            this.addMessage(" just left...without even signing out !");
             this.removeUser();
+            this.addMessage(" just left...without even signing out !");
         }
     }
 
@@ -104,7 +105,7 @@ public class ChatServer {
     private void updateUserList() {
         List<String> usernames = new ArrayList<>();
 
-        for (Session s : session.getOpenSessions()) {
+        for (Session s : sessions) {
             String username = (String) s.getUserProperties().get(USERNAME_KEY);
             usernames.add(username);
         }
@@ -130,11 +131,14 @@ public class ChatServer {
     private void broadcastUserListUpdate() {
         UserListUpdateMessage userListUpdateMessage = new UserListUpdateMessage(this.getUserList());
 
-        for (Session nextSession : session.getOpenSessions()) {
+        for (Session nextSession : sessions) {
             try {
-                nextSession.getBasicRemote().sendObject(userListUpdateMessage);
+                if (nextSession.isOpen()) {
+                    nextSession.getBasicRemote().sendObject(userListUpdateMessage);
+                }
             } catch (EncodeException | IOException e) {
                 LOG.error("Error updating a client: " + e.getMessage(), e);
+                sessions.remove(nextSession);
             }
         }
     }
@@ -146,13 +150,14 @@ public class ChatServer {
             this.session.getUserProperties();
             this.session.getUserProperties().remove(USERNAME_KEY);
             this.session.close(new CloseReason(CloseReason.CloseCodes.NORMAL_CLOSURE, "User logged off"));
+            sessions.remove(session);
         } catch (IOException e) {
             LOG.error("Error removing user", e);
         }
     }
 
     private void broadcastTranscriptUpdate() {
-        for (Session nextSession : session.getOpenSessions()) {
+        for (Session nextSession : sessions) {
             ChatUpdateMessage chatUpdateMessage = new ChatUpdateMessage(
                     this.transcript.getLastUsername(),
                     this.transcript.getLastMessage()
@@ -162,6 +167,7 @@ public class ChatServer {
                 nextSession.getBasicRemote().sendObject(chatUpdateMessage);
             } catch (EncodeException | IOException e) {
                 LOG.error("Error updating a client: " + e.getMessage(), e);
+                sessions.remove(session);
             }
         }
     }

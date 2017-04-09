@@ -30,7 +30,7 @@ function signIn() {
             onClose(evt);
         }
     }
-};
+}
 
 function onMessage(evt) {
     var mString = evt.data.toString();
@@ -55,7 +55,7 @@ function onError(evt) {
     alert("Error: " + evt.data);
 }
 
-function onClose(evt) {
+function onClose() {
     currentUsername = "";
     refreshForSignInOut();
 }
@@ -117,8 +117,8 @@ function writeUserlist(rawStr) {
     }
     usernames.push(remaining);
     userListID.textContent = "";
-    var i = 0;
-    for (i = 0; i < usernames.length; i++) {
+
+    for (var i = 0; i < usernames.length; i++) {
         userListID.textContent = userListID.textContent + usernames[i];
         if (i < (usernames.length - 1)) {
             userListID.textContent = userListID.textContent + "\n";
